@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
+from urllib.parse import quote
+import webbrowser
+import tempfile
 from typing import Dict
 
 import yaml
@@ -70,6 +74,11 @@ def main() -> None:
         default=Path("problem_instance.yaml"),
         help="Path to the YAML instance configuration.",
     )
+    parser.add_argument(
+        "--visualize",
+        action="store_true",
+        help="Open an interactive browser visualisation of the solution.",
+    )
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -94,6 +103,34 @@ def main() -> None:
     )
 
     print_plan(knapsack_result, plan)
+
+    if args.visualize:
+        from visualize_html import compute_layout, render_html
+
+        layout = compute_layout(config["graph"]["nodes"])
+        html = render_html(
+            plan=plan,
+            knapsack_result=knapsack_result,
+            config=config,
+            layout=layout,
+        )
+        data_uri = "data:text/html;charset=utf-8," + quote(html, safe="~()*!.'")
+        opened = False
+        use_data_uri = sys.platform != "darwin"
+        if use_data_uri:
+            try:
+                opened = webbrowser.open_new_tab(data_uri)
+            except Exception as exc:  # pragma: no cover - platform dependent
+                print(f"Warning: unable to launch browser for visualisation ({exc}).")
+        if not opened:
+            temp = tempfile.NamedTemporaryFile(
+                "w", suffix=".html", delete=False, encoding="utf-8"
+            )
+            with temp:
+                temp.write(html)
+            tmp_path = Path(temp.name)
+            webbrowser.open_new_tab(tmp_path.as_uri())
+            print(f"Visualisation stored at: {tmp_path}")
 
 
 if __name__ == "__main__":

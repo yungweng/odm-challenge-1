@@ -34,6 +34,16 @@ python main.py
 By default the program reads `problem_instance.yaml` in the current directory.  
 Use `--config /path/to/other.yaml` to target a different instance.
 
+### Browser visualisation
+
+Launch the interactive HTML visualiser directly from the CLI:
+
+```bash
+python main.py --visualize
+```
+
+The script opens the solution in your default browser (falling back to a temporary HTML file if the browser refuses a `data:` URI; the temp file remains on disk so you can revisit it or delete it manually). Use `--config` alongside `--visualize` to explore the larger instance files.
+
 ### Output overview
 
 The script prints:
