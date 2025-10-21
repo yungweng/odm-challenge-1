@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Dict, List, Sequence, Tuple
 
@@ -33,6 +34,7 @@ class RoutePlan:
     detour_cost: float = 0.0
     final_route: List[str] = field(default_factory=list)
     goods_picked: Dict[str, Dict[ProductName, int]] = field(default_factory=dict)
+    verification_cost: float | None = None
 
     @property
     def total_cost(self) -> float:
@@ -66,6 +68,76 @@ def collect_on_path(
 
 def remaining_requirements_met(remaining: Dict[ProductName, int]) -> bool:
     return all(amount <= 0 for amount in remaining.values())
+
+
+def verify_detour_optimality(
+    candidates: Sequence[DetourCandidate],
+    remaining: Dict[ProductName, int],
+    product_order: List[ProductName],
+    expected_cost: float,
+) -> float:
+    """Explicitly verify no cheaper detour combination meets the remaining demand."""
+
+    target = tuple(max(0, remaining[product]) for product in product_order)
+    if all(value == 0 for value in target):
+        if not math.isclose(expected_cost, 0.0, abs_tol=1e-9):
+            raise RuntimeError(
+                "Verification failed: zero remaining demand yet detour cost is non-zero."
+            )
+        return 0.0
+
+    best_cost: float | None = None
+
+    def dfs(index: int, state: Tuple[int, ...], cost: float) -> None:
+        nonlocal best_cost
+        if best_cost is not None and cost >= best_cost - 1e-9:
+            return
+
+        if index == len(candidates):
+            if state == target:
+                if best_cost is None or cost < best_cost:
+                    best_cost = cost
+            return
+
+        candidate = candidates[index]
+
+        # Option 1: skip this candidate entirely.
+        dfs(index + 1, state, cost)
+
+        # Option 2: take a non-zero pickup combination from this candidate.
+        for option in generate_pick_options(candidate, remaining, product_order):
+            new_state_list: List[int] = []
+            feasible = True
+            for dim, value in enumerate(option):
+                total = state[dim] + value
+                if total > target[dim]:
+                    feasible = False
+                    break
+                new_state_list.append(total)
+
+            if not feasible:
+                continue
+
+            dfs(
+                index + 1,
+                tuple(new_state_list),
+                cost + candidate.detour_cost,
+            )
+
+    dfs(0, tuple(0 for _ in product_order), 0.0)
+
+    if best_cost is None:
+        raise RuntimeError(
+            "Verification failed: remaining demand cannot be met by any detour combination."
+        )
+
+    if best_cost + 1e-9 < expected_cost:
+        raise RuntimeError(
+            "Detour plan is not cost-optimal: "
+            f"verification found cheaper cost {best_cost} < planned cost {expected_cost}."
+        )
+
+    return best_cost
 
 
 def compute_detour_candidates(
@@ -257,8 +329,11 @@ def plan_route(
         goods_picked=goods_picked,
     )
 
-    if remaining_requirements_met(remaining):
+    remaining_needed = {product: max(0, remaining[product]) for product in target_counts}
+
+    if remaining_requirements_met(remaining_needed):
         plan.final_route = list(base_path)
+        plan.verification_cost = 0.0
         return plan
 
     # Phase 2: compute cheapest detours that fill remaining demand.
@@ -266,7 +341,7 @@ def plan_route(
 
     product_order = list(target_counts.keys())
     detour_selections, detour_cost = select_detours(
-        candidates, remaining, product_order
+        candidates, remaining_needed, product_order
     )
 
     for detour in detour_selections:
@@ -295,5 +370,14 @@ def plan_route(
                 "Planned pickups do not match target product counts. "
                 f"Need {required} {product}, planned {totals.get(product, 0)}."
             )
+
+    # Explicit verification: confirm no cheaper detour combination exists.
+    verified_cost = verify_detour_optimality(
+        candidates=candidates,
+        remaining=remaining_needed,
+        product_order=product_order,
+        expected_cost=plan.detour_cost,
+    )
+    plan.verification_cost = verified_cost
 
     return plan

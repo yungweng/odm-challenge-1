@@ -43,6 +43,12 @@ def print_plan(result: KnapsackResult, plan: RoutePlan) -> None:
     else:
         print("No detours required.")
 
+    if plan.verification_cost is not None:
+        print(
+            f"Verification: brute-force search confirmed detour cost "
+            f"{plan.detour_cost:.2f} (best possible {plan.verification_cost:.2f})."
+        )
+
     print()
     print(f"Final route: {' -> '.join(plan.final_route)}")
     print(f"Total travel cost: {plan.total_cost:.2f}")
