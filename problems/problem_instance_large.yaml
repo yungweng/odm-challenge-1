@@ -1,0 +1,102 @@
+# Larger test instance for ODM Challenge 1
+
+graph:
+  nodes:
+    - A
+    - B
+    - C
+    - D
+    - E
+    - F
+    - G
+    - H
+    - I
+    - J
+    - K
+    - L
+    - M
+    - N
+    - O
+    - P
+    - Q
+    - R
+    - S
+    - T
+
+  edges:
+    # Format: [node1, node2, cost]
+    - [A, B, 3]
+    - [A, C, 2]
+    - [A, D, 4]
+    - [B, E, 2]
+    - [B, F, 5]
+    - [C, F, 2]
+    - [C, G, 3]
+    - [D, G, 2]
+    - [D, H, 4]
+    - [E, I, 3]
+    - [F, I, 2]
+    - [F, J, 4]
+    - [G, J, 2]
+    - [G, K, 3]
+    - [H, K, 2]
+    - [H, L, 4]
+    - [I, M, 3]
+    - [J, M, 2]
+    - [J, N, 3]
+    - [K, N, 2]
+    - [K, O, 3]
+    - [L, O, 2]
+    - [L, P, 4]
+    - [M, Q, 3]
+    - [N, Q, 2]
+    - [N, R, 4]
+    - [O, R, 2]
+    - [O, S, 3]
+    - [P, S, 2]
+    - [P, T, 5]
+    - [Q, T, 3]
+    - [R, T, 2]
+    - [S, T, 2]
+
+products:
+  gemstones:
+    profit_per_unit: 30
+    weight_per_unit: 2
+  epoxy:
+    profit_per_unit: 10
+    weight_per_unit: 1
+  copper:
+    profit_per_unit: 100
+    weight_per_unit: 6
+
+inventory:
+  A: {gemstones: 0, epoxy: 0, copper: 0}
+  B: {gemstones: 1, epoxy: 1, copper: 0}
+  C: {gemstones: 2, epoxy: 1, copper: 0}
+  D: {gemstones: 0, epoxy: 2, copper: 1}
+  E: {gemstones: 0, epoxy: 3, copper: 1}
+  F: {gemstones: 1, epoxy: 0, copper: 2}
+  G: {gemstones: 2, epoxy: 0, copper: 1}
+  H: {gemstones: 3, epoxy: 1, copper: 0}
+  I: {gemstones: 0, epoxy: 2, copper: 2}
+  J: {gemstones: 1, epoxy: 0, copper: 3}
+  K: {gemstones: 2, epoxy: 1, copper: 2}
+  L: {gemstones: 0, epoxy: 3, copper: 2}
+  M: {gemstones: 2, epoxy: 1, copper: 2}
+  N: {gemstones: 1, epoxy: 0, copper: 3}
+  O: {gemstones: 2, epoxy: 2, copper: 3}
+  P: {gemstones: 0, epoxy: 4, copper: 2}
+  Q: {gemstones: 1, epoxy: 0, copper: 4}
+  R: {gemstones: 2, epoxy: 2, copper: 1}
+  S: {gemstones: 1, epoxy: 1, copper: 3}
+  T: {gemstones: 0, epoxy: 0, copper: 0}
+
+constraints:
+  warehouse_capacity_tons: 120
+  truck_capacity_units: 20
+  copper_to_gemstone_ratio: 2
+
+routing:
+  start_node: A
+  end_node: T
