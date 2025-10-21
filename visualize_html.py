@@ -14,18 +14,13 @@ ProductName = str
 def compute_layout(
     nodes: Sequence[str], width: float = 800.0, height: float = 600.0
 ) -> Dict[str, Tuple[float, float]]:
-    """Place nodes on a circle for a simple, dependency-free layout."""
-    centre_x = width / 2.0
-    centre_y = height / 2.0
-    radius = min(width, height) * 0.38 if nodes else 0.0
-    positions: Dict[str, Tuple[float, float]] = {}
-    total = len(nodes)
-    for index, node in enumerate(nodes):
-        angle = 2.0 * math.pi * (index / total) if total else 0.0
-        x = centre_x + radius * math.cos(angle)
-        y = centre_y + radius * math.sin(angle)
-        positions[node] = (x, y)
-    return positions
+    """
+    Compute a simple force-directed layout using graph structure.
+    This is a basic implementation that will be refined by D3.js in the browser.
+    """
+    # Return None to signal that D3.js should compute the layout
+    # This allows for a proper force-directed graph layout
+    return None
 
 
 def _route_edges(path: Sequence[str]) -> List[Tuple[str, str]]:
@@ -47,8 +42,8 @@ def render_html(
     if layout is None:
         layout = compute_layout(nodes)
 
-    width = 900
-    height = 640
+    width = 1200
+    height = 800
 
     def node_value(node: str) -> float:
         value = 0.0
@@ -75,19 +70,20 @@ def render_html(
 
     node_data = []
     for node in nodes:
-        x, y = layout[node]
         stock = inventory.get(node, {})
-        node_data.append(
-            {
-                "id": node,
-                "x": x,
-                "y": y,
-                "inventory": {
-                    product: stock.get(product, 0) for product in products.keys()
-                },
-                "value": node_value(node),
-            }
-        )
+        node_info = {
+            "id": node,
+            "inventory": {
+                product: stock.get(product, 0) for product in products.keys()
+            },
+            "value": node_value(node),
+        }
+        # Only add x, y if layout is provided
+        if layout is not None:
+            x, y = layout[node]
+            node_info["x"] = x
+            node_info["y"] = y
+        node_data.append(node_info)
 
     detours = [
         {
@@ -99,6 +95,20 @@ def render_html(
         for detour in plan.detours
     ]
 
+    def format_factor(value: float) -> str:
+        return f"{value:g}"
+
+    ratio_lines: List[str] = []
+    if "copper_to_gemstone_ratio" in constraints:
+        ratio_lines.append(
+            f"copper ≤ {format_factor(constraints['copper_to_gemstone_ratio'])} × gemstones"
+        )
+    for rule in constraints.get("ratio_constraints", []):
+        ratio_lines.append(
+            f"{rule['numerator']} ≤ {format_factor(rule['factor'])} × {rule['denominator']}"
+        )
+    ratio_summary = "<br/>".join(ratio_lines) if ratio_lines else "—"
+
     data = {
         "canvas": {"width": width, "height": height},
         "nodes": node_data,
@@ -108,6 +118,7 @@ def render_html(
         "target_counts": knapsack_result.counts,
         "constraints": constraints,
         "detours": detours,
+        "ratio_constraints": ratio_lines,
         "base_cost": plan.base_cost,
         "detour_cost": plan.detour_cost,
         "total_cost": plan.total_cost,
@@ -126,25 +137,32 @@ def render_html(
     <style>
       :root {
         color-scheme: light dark;
-        font-family: "Segoe UI", Roboto, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", sans-serif;
       }
       body {
         margin: 0;
-        background: #111827;
+        background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
         color: #f9fafb;
         display: flex;
         flex-direction: column;
         min-height: 100vh;
       }
       header {
-        padding: 1rem 2rem;
-        background: #1f2937;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        padding: 1.2rem 2rem;
+        background: rgba(31, 41, 55, 0.8);
+        backdrop-filter: blur(10px);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+        border-bottom: 1px solid rgba(99, 102, 241, 0.2);
       }
       h1 {
         margin: 0;
-        font-size: 1.4rem;
+        font-size: 1.6rem;
+        font-weight: 700;
         letter-spacing: 0.02em;
+        background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
       }
       main {
         flex: 1;
@@ -155,115 +173,207 @@ def render_html(
       }
       #graph-container {
         flex: 1;
-        background: #0f172a;
-        border-radius: 14px;
-        box-shadow: inset 0 0 30px rgba(15,23,42,0.6);
+        background: rgba(15, 23, 42, 0.6);
+        border-radius: 16px;
+        box-shadow:
+          inset 0 0 60px rgba(15,23,42,0.8),
+          0 10px 40px rgba(0,0,0,0.5);
         position: relative;
         overflow: hidden;
+        border: 1px solid rgba(99, 102, 241, 0.1);
       }
       svg {
         width: 100%;
         height: 100%;
+        cursor: grab;
+      }
+      svg:active {
+        cursor: grabbing;
+      }
+      .zoom-controls {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        z-index: 10;
+      }
+      .zoom-btn {
+        width: 40px;
+        height: 40px;
+        border-radius: 8px;
+        border: none;
+        background: rgba(31, 41, 55, 0.9);
+        backdrop-filter: blur(10px);
+        color: #fbbf24;
+        font-size: 20px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.3s;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        border: 1px solid rgba(99, 102, 241, 0.2);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+      }
+      .zoom-btn:hover {
+        background: rgba(31, 41, 55, 1);
+        transform: scale(1.1);
+        box-shadow: 0 6px 16px rgba(251, 191, 36, 0.4);
+      }
+      .zoom-btn:active {
+        transform: scale(0.95);
       }
       .edge {
-        stroke: #4b5563;
-        stroke-width: 1.5;
-        opacity: 0.7;
+        stroke: #475569;
+        stroke-width: 2;
+        opacity: 0.5;
+        transition: opacity 0.3s, stroke-width 0.3s;
+      }
+      .edge:hover {
+        opacity: 0.9;
+        stroke-width: 3;
       }
       .edge-route {
         stroke: #f97316;
-        stroke-width: 3;
+        stroke-width: 4;
         opacity: 0.95;
+        filter: drop-shadow(0 0 4px rgba(249, 115, 22, 0.6));
       }
       .edge-cost {
-        fill: #9ca3af;
-        font-size: 11px;
+        fill: #cbd5e1;
+        font-size: 12px;
+        font-weight: 600;
         pointer-events: none;
+        text-shadow: 0 0 8px rgba(0,0,0,0.8);
       }
       .node {
         stroke: #f9fafb;
-        stroke-width: 2;
+        stroke-width: 3;
+        cursor: pointer;
+        transition: all 0.3s;
+        filter: drop-shadow(0 0 8px rgba(0,0,0,0.5));
+      }
+      .node:hover {
+        stroke-width: 5;
+        stroke: #fbbf24;
+        filter: drop-shadow(0 0 16px rgba(251, 191, 36, 0.8));
       }
       .node-label {
         fill: #f3f4f6;
-        font-size: 12px;
-        font-weight: 600;
+        font-size: 14px;
+        font-weight: 700;
         text-anchor: middle;
         alignment-baseline: middle;
         pointer-events: none;
+        text-shadow: 0 0 8px rgba(0,0,0,0.9);
       }
       .truck {
         fill: #38bdf8;
         stroke: #0ea5e9;
-        stroke-width: 2;
-        filter: drop-shadow(0 0 6px rgba(56,189,248,0.7));
+        stroke-width: 3;
+        filter: drop-shadow(0 0 12px rgba(56,189,248,0.9));
+        animation: pulse 2s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        0%, 100% { filter: drop-shadow(0 0 12px rgba(56,189,248,0.9)); }
+        50% { filter: drop-shadow(0 0 20px rgba(56,189,248,1)); }
       }
       .sidebar {
-        width: 320px;
+        width: 360px;
         display: flex;
         flex-direction: column;
         gap: 1rem;
       }
       .panel {
-        background: #1f2937;
-        border-radius: 12px;
-        padding: 1rem 1.2rem;
-        box-shadow: 0 10px 25px rgba(15,23,42,0.4);
+        background: rgba(31, 41, 55, 0.8);
+        backdrop-filter: blur(10px);
+        border-radius: 14px;
+        padding: 1.2rem 1.4rem;
+        box-shadow: 0 10px 30px rgba(15,23,42,0.5);
+        border: 1px solid rgba(99, 102, 241, 0.15);
       }
       .panel h2 {
-        margin: 0 0 0.5rem;
-        font-size: 1.1rem;
-        color: #fbbf24;
+        margin: 0 0 0.8rem;
+        font-size: 1.2rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
         letter-spacing: 0.02em;
       }
       .stats {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 0.4rem 0.9rem;
+        gap: 0.6rem 1rem;
         font-size: 0.95rem;
       }
       .stats span {
-        color: #d1d5db;
+        color: #e5e7eb;
+      }
+      .stats span:nth-child(even) {
+        font-weight: 700;
+        color: #fbbf24;
       }
       #pickups {
         font-size: 0.95rem;
-        line-height: 1.4;
+        line-height: 1.6;
+        color: #e5e7eb;
       }
       button {
-        padding: 0.6rem;
-        border-radius: 8px;
+        padding: 0.8rem;
+        border-radius: 10px;
         border: none;
-        background: #2563eb;
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
         color: white;
-        font-weight: 600;
+        font-weight: 700;
         cursor: pointer;
-        transition: transform 0.2s, background 0.2s;
+        transition: all 0.3s;
+        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
       }
       button:hover {
-        transform: translateY(-1px);
-        background: #1d4ed8;
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(37, 99, 235, 0.6);
+        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+      }
+      button:active {
+        transform: translateY(0);
       }
       footer {
-        padding: 0.8rem 1.5rem;
+        padding: 1rem 1.5rem;
         text-align: center;
         font-size: 0.9rem;
         color: #9ca3af;
+        background: rgba(31, 41, 55, 0.5);
+        backdrop-filter: blur(10px);
+        border-top: 1px solid rgba(99, 102, 241, 0.1);
       }
       .legend {
         display: flex;
-        gap: 1rem;
-        font-size: 0.85rem;
-        color: #d1d5db;
+        gap: 1.5rem;
+        justify-content: center;
+        font-size: 0.9rem;
+        color: #e5e7eb;
+        flex-wrap: wrap;
       }
       .legend span {
         display: flex;
         align-items: center;
-        gap: 0.3rem;
+        gap: 0.4rem;
       }
       .legend div {
-        width: 14px;
-        height: 14px;
+        width: 16px;
+        height: 16px;
         border-radius: 4px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      }
+      #detours {
+        font-size: 0.9rem;
+        line-height: 1.6;
+        color: #e5e7eb;
       }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
@@ -275,6 +385,11 @@ def render_html(
     <main>
       <div id="graph-container">
         <svg id="graph" viewBox="0 0 $width $height"></svg>
+        <div class="zoom-controls">
+          <button class="zoom-btn" id="zoom-in" title="Zoom In">+</button>
+          <button class="zoom-btn" id="zoom-out" title="Zoom Out">−</button>
+          <button class="zoom-btn" id="zoom-reset" title="Reset View">⟲</button>
+        </div>
       </div>
       <aside class="sidebar">
         <section class="panel">
@@ -299,7 +414,7 @@ def render_html(
           <div class="stats">
             <span>Warehouse (t)</span><span>$warehouse_capacity</span>
             <span>Truck units</span><span>$truck_capacity</span>
-            <span>Copper ≤</span><span>$ratio × gemstones</span>
+            <span>Ratios</span><span>$ratio_summary</span>
           </div>
         </section>
         <section class="panel">
@@ -319,60 +434,147 @@ def render_html(
     <script>
       const data = JSON.parse(document.getElementById("visualisation-data").textContent);
       const svg = d3.select("#graph");
-      const nodeById = new Map(data.nodes.map(node => [node.id, node]));
+      const width = data.canvas.width;
+      const height = data.canvas.height;
+
+      // Create a group for all graph elements that will be zoomed/panned
+      const g = svg.append("g");
 
       // Colour scale for node value
       const valueExtent = d3.extent(data.nodes, node => node.value);
-      const colour = d3.scaleSequential(d3.interpolateYlGn).domain(valueExtent);
+      const colour = d3.scaleSequential(d3.interpolatePlasma).domain(valueExtent);
 
-      // Draw edges
-      svg.append("g")
+      // Set up zoom behavior
+      const zoom = d3.zoom()
+        .scaleExtent([0.1, 10])
+        .on("zoom", (event) => {
+          g.attr("transform", event.transform);
+        });
+
+      svg.call(zoom);
+
+      // Zoom control buttons
+      d3.select("#zoom-in").on("click", () => {
+        svg.transition().duration(300).call(zoom.scaleBy, 1.3);
+      });
+
+      d3.select("#zoom-out").on("click", () => {
+        svg.transition().duration(300).call(zoom.scaleBy, 0.7);
+      });
+
+      d3.select("#zoom-reset").on("click", () => {
+        svg.transition().duration(500).call(
+          zoom.transform,
+          d3.zoomIdentity
+        );
+      });
+
+      // Create force simulation for graph layout
+      const simulation = d3.forceSimulation(data.nodes)
+        .force("link", d3.forceLink(data.edges)
+          .id(d => d.id)
+          .distance(edge => edge.cost * 15 + 80)
+          .strength(0.3))
+        .force("charge", d3.forceManyBody().strength(-800))
+        .force("center", d3.forceCenter(width / 2, height / 2))
+        .force("collision", d3.forceCollide().radius(35));
+
+      // Create edge elements
+      const edgeGroup = g.append("g");
+      const edges = edgeGroup
         .selectAll("line")
         .data(data.edges)
         .join("line")
-        .attr("class", edge => edge.in_route ? "edge edge-route" : "edge")
-        .attr("x1", edge => nodeById.get(edge.source).x)
-        .attr("y1", edge => nodeById.get(edge.source).y)
-        .attr("x2", edge => nodeById.get(edge.target).x)
-        .attr("y2", edge => nodeById.get(edge.target).y);
+        .attr("class", edge => edge.in_route ? "edge edge-route" : "edge");
 
       // Edge cost labels
-      svg.append("g")
+      const edgeLabelGroup = g.append("g");
+      const edgeLabels = edgeLabelGroup
         .selectAll("text")
         .data(data.edges)
         .join("text")
         .attr("class", "edge-cost")
-        .attr("x", edge => (nodeById.get(edge.source).x + nodeById.get(edge.target).x) / 2)
-        .attr("y", edge => (nodeById.get(edge.source).y + nodeById.get(edge.target).y) / 2 - 6)
         .text(edge => edge.cost);
 
-      // Draw nodes
-      svg.append("g")
+      // Create node group for nodes
+      const nodeGroup = g.append("g");
+      const nodes = nodeGroup
         .selectAll("circle")
         .data(data.nodes)
         .join("circle")
         .attr("class", "node")
-        .attr("r", 20)
-        .attr("cx", node => node.x)
-        .attr("cy", node => node.y)
-        .attr("fill", node => colour(node.value || 0));
+        .attr("r", 25)
+        .attr("fill", node => colour(node.value || 0))
+        .call(d3.drag()
+          .on("start", dragstarted)
+          .on("drag", dragged)
+          .on("end", dragended));
+
+      // Add tooltip on hover
+      nodes.append("title")
+        .text(node => {
+          const inv = Object.entries(node.inventory)
+            .filter(([_, count]) => count > 0)
+            .map(([product, count]) => product + ': ' + count)
+            .join(', ');
+          return node.id + '\\nValue: ' + (node.value || 0).toFixed(0) + '€\\n' +
+                 (inv || 'No inventory');
+        });
 
       // Node labels
-      svg.append("g")
+      const labelGroup = g.append("g");
+      const labels = labelGroup
         .selectAll("text")
         .data(data.nodes)
         .join("text")
         .attr("class", "node-label")
-        .attr("x", node => node.x)
-        .attr("y", node => node.y)
         .text(node => node.id);
 
       // Truck marker
-      const truck = svg.append("circle")
+      const truck = g.append("circle")
         .attr("class", "truck")
-        .attr("r", 10)
-        .attr("cx", data.nodes[0]?.x || 0)
-        .attr("cy", data.nodes[0]?.y || 0);
+        .attr("r", 12);
+
+      const nodeById = new Map(data.nodes.map(node => [node.id, node]));
+
+      // Update positions on simulation tick
+      simulation.on("tick", () => {
+        edges
+          .attr("x1", edge => edge.source.x)
+          .attr("y1", edge => edge.source.y)
+          .attr("x2", edge => edge.target.x)
+          .attr("y2", edge => edge.target.y);
+
+        edgeLabels
+          .attr("x", edge => (edge.source.x + edge.target.x) / 2)
+          .attr("y", edge => (edge.source.y + edge.target.y) / 2 - 8);
+
+        nodes
+          .attr("cx", node => node.x)
+          .attr("cy", node => node.y);
+
+        labels
+          .attr("x", node => node.x)
+          .attr("y", node => node.y);
+      });
+
+      // Drag functions
+      function dragstarted(event) {
+        if (!event.active) simulation.alphaTarget(0.3).restart();
+        event.subject.fx = event.subject.x;
+        event.subject.fy = event.subject.y;
+      }
+
+      function dragged(event) {
+        event.subject.fx = event.x;
+        event.subject.fy = event.y;
+      }
+
+      function dragended(event) {
+        if (!event.active) simulation.alphaTarget(0);
+        event.subject.fx = null;
+        event.subject.fy = null;
+      }
 
       const statusEl = document.getElementById("status");
       const pickupsEl = document.getElementById("pickups");
@@ -393,13 +595,16 @@ def render_html(
 
       function formatCollected() {
         return Object.entries(data.target_counts)
-          .map(([product, required]) => product + ': ' + collected[product] + '/' + required)
-          .join("<br/>");
+          .map(([product, required]) => {
+            const progress = collected[product] >= required ? '✓' : '';
+            return '<div>' + product + ': <strong>' + collected[product] + '/' + required + '</strong> ' + progress + '</div>';
+          })
+          .join("");
       }
 
       function updateSidebar(stepIndex) {
         const nodeId = data.final_route[stepIndex];
-        const node = nodeById.get(nodeId);
+        const node = data.nodes.find(n => n.id === nodeId);
         const goodsHere = data.goods_picked[nodeId];
         if (goodsHere && !visitedPickups.has(nodeId)) {
           Object.entries(goodsHere).forEach(([product, amount]) => {
@@ -420,54 +625,73 @@ def render_html(
         Object.keys(data.target_counts).forEach(key => { collected[key] = 0; });
         visitedPickups.clear();
 
-        let step = 0;
-        updateSidebar(step);
-        truck.attr("cx", nodeById.get(data.final_route[0]).x)
-             .attr("cy", nodeById.get(data.final_route[0]).y);
+        // Wait for simulation to stabilize before starting animation
+        simulation.alpha(0.3).restart();
+        setTimeout(() => {
+          simulation.stop();
 
-        const interval = setInterval(() => {
-          step += 1;
-          if (step >= data.final_route.length) {
-            clearInterval(interval);
-            return;
-          }
-          const nodeId = data.final_route[step];
-          const node = nodeById.get(nodeId);
-          const prevNode = nodeById.get(data.final_route[step - 1]);
-
-          truck
-            .transition()
-            .duration(400)
-            .attr("cx", node.x)
-            .attr("cy", node.y);
-
-          svg.append("line")
-            .attr("class", "edge edge-route")
-            .attr("x1", prevNode.x)
-            .attr("y1", prevNode.y)
-            .attr("x2", prevNode.x)
-            .attr("y2", prevNode.y)
-            .transition()
-            .duration(400)
-            .attr("x2", node.x)
-            .attr("y2", node.y)
-            .attr("opacity", 0.9);
-
+          let step = 0;
           updateSidebar(step);
-        }, 900);
+          const startNode = data.nodes.find(n => n.id === data.final_route[0]);
+          truck.attr("cx", startNode.x).attr("cy", startNode.y);
 
-        return interval;
+          const interval = setInterval(() => {
+            step += 1;
+            if (step >= data.final_route.length) {
+              clearInterval(interval);
+              return;
+            }
+            const nodeId = data.final_route[step];
+            const node = data.nodes.find(n => n.id === nodeId);
+            const prevNode = data.nodes.find(n => n.id === data.final_route[step - 1]);
+
+            truck
+              .transition()
+              .duration(600)
+              .attr("cx", node.x)
+              .attr("cy", node.y);
+
+            // Animate route path
+            g.append("line")
+              .attr("class", "edge edge-route")
+              .attr("x1", prevNode.x)
+              .attr("y1", prevNode.y)
+              .attr("x2", prevNode.x)
+              .attr("y2", prevNode.y)
+              .transition()
+              .duration(600)
+              .attr("x2", node.x)
+              .attr("y2", node.y);
+
+            updateSidebar(step);
+          }, 1200);
+
+          return interval;
+        }, 3000);
       }
 
-      let currentInterval = animateRoute();
+      // Start animation after layout stabilizes
+      setTimeout(() => {
+        animateRoute();
+      }, 3000);
 
       document.getElementById("replay").addEventListener("click", () => {
-        if (currentInterval) {
-          clearInterval(currentInterval);
-        }
-        svg.selectAll(".edge.edge-route")
-          .attr("opacity", 0.4);
-        currentInterval = animateRoute();
+        // Clear animated routes
+        g.selectAll(".edge.edge-route").remove();
+
+        // Re-add static route edges
+        data.edges.forEach(edge => {
+          if (edge.in_route) {
+            g.insert("line", ":first-child")
+              .attr("class", "edge edge-route")
+              .attr("x1", edge.source.x)
+              .attr("y1", edge.source.y)
+              .attr("x2", edge.target.x)
+              .attr("y2", edge.target.y);
+          }
+        });
+
+        animateRoute();
       });
     </script>
   </body>
@@ -487,7 +711,7 @@ def render_html(
         verification_cost=f"{verification:.0f}",
         warehouse_capacity=constraints["warehouse_capacity_tons"],
         truck_capacity=constraints["truck_capacity_units"],
-        ratio=constraints["copper_to_gemstone_ratio"],
+        ratio_summary=ratio_summary,
         json_payload=json_payload,
     )
     return html

@@ -25,6 +25,24 @@ The solution keeps all instance data in YAML (`problem_instance.yaml`) so larger
 
 No external solvers or randomness are used.
 
+### Ratio constraints
+
+Besides the legacy `copper_to_gemstone_ratio` key, you can encode any number of linear coupling limits via `constraints.ratio_constraints`. Each entry enforces
+`numerator ≤ factor × denominator`. Example:
+
+```yaml
+constraints:
+  warehouse_capacity_tons: 100
+  truck_capacity_units: 18
+  ratio_constraints:
+    - numerator: copper
+      denominator: gemstones
+      factor: 1.5
+    - numerator: copper
+      denominator: epoxy
+      factor: 2.5
+```
+
 ## Running the solver
 
 ```bash

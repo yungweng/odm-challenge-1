@@ -129,7 +129,13 @@ inventory:
 constraints:
   warehouse_capacity_tons: 100
   truck_capacity_units: 18
-  copper_to_gemstone_ratio: 1.5
+  ratio_constraints:
+    - numerator: copper
+      denominator: gemstones
+      factor: 1.5
+    - numerator: copper
+      denominator: epoxy
+      factor: 2.5
 
 routing:
   start_node: A

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Dict, Iterable, Tuple
+from typing import Dict, Iterable, List, Tuple
 
 
 ProductName = str
@@ -48,13 +48,53 @@ def solve_knapsack(
 
     weight_limit = constraints["warehouse_capacity_tons"]
     unit_limit = constraints["truck_capacity_units"]
-    copper_ratio = constraints["copper_to_gemstone_ratio"]
+
+    def build_ratio_constraints() -> List[Tuple[str, str, float]]:
+        ratios: List[Tuple[str, str, float]] = []
+        legacy_ratio = constraints.get("copper_to_gemstone_ratio")
+        if legacy_ratio is not None:
+            ratios.append(("copper", "gemstones", float(legacy_ratio)))
+        for rule in constraints.get("ratio_constraints", []):
+            ratios.append(
+                (
+                    rule["numerator"],
+                    rule["denominator"],
+                    float(rule["factor"]),
+                )
+            )
+        return ratios
+
+    ratio_constraints = build_ratio_constraints()
+
+    def ratios_satisfied(counts: Dict[ProductName, int]) -> bool:
+        for numerator, denominator, factor in ratio_constraints:
+            num = counts.get(numerator, 0)
+            denom = counts.get(denominator, 0)
+            if denom == 0:
+                if num > 0:
+                    return False
+            else:
+                if num > factor * denom + 1e-9:
+                    return False
+        return True
+
+    copper_gem_ratio: float | None = None
+    copper_gem_candidates = [
+        factor
+        for numerator, denominator, factor in ratio_constraints
+        if numerator == "copper" and denominator == "gemstones"
+    ]
+    if copper_gem_candidates:
+        copper_gem_ratio = min(copper_gem_candidates)
 
     best: KnapsackResult | None = None
 
     for gems in range(max_gems + 1):
-        # Copper upper bound comes from availability AND coupling copper ≤ ratio * gemstones.
-        max_copper_allowed = min(max_copper, math.floor(copper_ratio * gems))
+        max_copper_allowed = max_copper
+        if copper_gem_ratio is not None:
+            max_copper_allowed = min(
+                max_copper_allowed, math.floor(copper_gem_ratio * gems)
+            )
         for epoxy in range(max_epoxy + 1):
             total_units_partial = gems + epoxy
             weight_partial = (
@@ -87,6 +127,9 @@ def solve_knapsack(
                     "epoxy": epoxy,
                     "copper": copper,
                 }
+
+                if not ratios_satisfied(counts):
+                    continue
 
                 candidate = KnapsackResult(
                     counts=counts,
