@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib.parse import quote
 import webbrowser
 import tempfile
-from typing import Dict
+from typing import Dict, List
 
 import yaml
 
@@ -25,43 +25,71 @@ def summarise_goods(counts: Dict[str, int]) -> str:
     return ", ".join(parts)
 
 
-def print_plan(result: KnapsackResult, plan: RoutePlan) -> None:
+def print_plans(result: KnapsackResult, plans: List[RoutePlan]) -> None:
     print("=== Knapsack Target (Profit Maximisation) ===")
     print(f"Target mix: {summarise_goods(result.counts)}")
     print(f"Total profit (without travel costs): {result.profit:.2f} €")
     print()
 
     print("=== Route Planning (Cost Minimisation) ===")
-    print(f"Base path: {' -> '.join(plan.base_path)} (cost {plan.base_cost:.2f})")
-    if plan.detours:
-        print("Detours:")
-        for detour in plan.detours:
-            candidate = detour.candidate
-            goods_summary = summarise_goods(detour.goods_picked)
-            forward = " -> ".join(candidate.path_to_candidate)
-            print(
-                f"  - {candidate.anchor} detour to {candidate.node} "
-                f"(path {forward}, cost {candidate.detour_cost:.2f}) "
-                f"goods [{goods_summary}]"
-            )
-    else:
-        print("No detours required.")
+    if not plans:
+        print("No feasible minimal routes found.")
+        return
 
-    if plan.verification_cost is not None:
+    minimal_total_cost = min(plan.total_cost for plan in plans)
+    route_word = "route" if len(plans) == 1 else "routes"
+    unique_routes: Dict[Tuple[str, ...], List[RoutePlan]] = {}
+    for plan in plans:
+        unique_routes.setdefault(tuple(plan.final_route), []).append(plan)
+
+    print(
+        f"Found {len(plans)} optimal {route_word} across "
+        f"{len(unique_routes)} distinct final routes (travel cost {minimal_total_cost:.2f})."
+    )
+    print()
+
+    for idx, (route, variants) in enumerate(unique_routes.items(), start=1):
+        primary = variants[0]
+        net_profit = result.profit - primary.total_cost
+        base_path = " -> ".join(primary.base_path)
+        print(f"[Route {idx}] {' -> '.join(route)}")
         print(
-            f"Verification: brute-force search confirmed detour cost "
-            f"{plan.detour_cost:.2f} (best possible {plan.verification_cost:.2f})."
+            f"  Travel cost {primary.total_cost:.2f} (base {base_path}, cost {primary.base_cost:.2f})"
         )
+        print(f"  Net profit {net_profit:.2f} €")
+        if primary.verification_cost is not None:
+            print(
+                f"  Verified detour lower bound {primary.verification_cost:.2f}"
+            )
 
-    print()
-    print(f"Final route: {' -> '.join(plan.final_route)}")
-    print(f"Total travel cost: {plan.total_cost:.2f}")
-    net_profit = result.profit - plan.total_cost
-    print(f"Net profit (profit - travel cost): {net_profit:.2f} €")
-    print()
-    print("Goods picked per location:")
-    for node, goods in sorted(plan.goods_picked.items()):
-        print(f"  {node}: {summarise_goods(goods)}")
+        if not primary.detours:
+            print("  Detours: none required")
+        else:
+            variant_label = "variant" if len(variants) == 1 else "variants"
+            print(f"  Detour {variant_label}: {len(variants)} option(s)")
+            for option_idx, variant in enumerate(variants, start=1):
+                print(
+                    f"    ({option_idx}) detour cost {variant.detour_cost:.2f}"
+                )
+                for detour in variant.detours:
+                    candidate = detour.candidate
+                    goods_summary = summarise_goods(detour.goods_picked)
+                    path = " -> ".join(candidate.path_anchor_to_rejoin)
+                    rejoin_note = (
+                        ""
+                        if candidate.rejoin == candidate.anchor
+                        else f" (rejoin {candidate.rejoin})"
+                    )
+                    print(
+                        f"       {path}{rejoin_note}  goods [{goods_summary}]"
+                    )
+                pickup_summary = "; ".join(
+                    f"{node}[{summarise_goods(goods)}]"
+                    for node, goods in sorted(variant.goods_picked.items())
+                )
+                print(f"       pickups: {pickup_summary}")
+
+        print()
 
 
 def main() -> None:
@@ -94,7 +122,7 @@ def main() -> None:
 
     routing_config = config["routing"]
     # Phase 2: cost minimisation subject to the fixed product mix.
-    plan = plan_route(
+    plans = plan_route(
         graph=graph,
         inventory=config["inventory"],
         target_counts=knapsack_result.counts,
@@ -102,14 +130,24 @@ def main() -> None:
         end=routing_config["end_node"],
     )
 
-    print_plan(knapsack_result, plan)
+    print_plans(knapsack_result, plans)
 
     if args.visualize:
         from visualize_html import compute_layout, render_html
 
+        if not plans:
+            raise RuntimeError(
+                "Visualisation requested but no route plans were produced."
+            )
+        primary_plan = plans[0]
+        if len(plans) > 1:
+            print(
+                f"Visualising Route Option 1 out of {len(plans)} optimal choices in the browser."
+            )
+
         layout = compute_layout(config["graph"]["nodes"])
         html = render_html(
-            plan=plan,
+            plan=primary_plan,
             knapsack_result=knapsack_result,
             config=config,
             layout=layout,

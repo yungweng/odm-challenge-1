@@ -68,6 +68,55 @@ class Graph:
         path.reverse()
         return cost, path
 
+    def all_shortest_paths(
+        self, source: str, target: str, *, tol: float = 1e-9
+    ) -> Tuple[float, List[List[str]]]:
+        """Return every shortest source→target path alongside the optimal cost."""
+        distances: Dict[str, float] = {node: float("inf") for node in self.nodes}
+        parents: Dict[str, List[str]] = {node: [] for node in self.nodes}
+        distances[source] = 0.0
+
+        queue: List[Tuple[float, str]] = [(0.0, source)]
+
+        while queue:
+            distance_u, u = heappop(queue)
+            if distance_u > distances[u] + tol:
+                continue
+
+            for v, cost in self.neighbors(u):
+                candidate = distance_u + cost
+                current_best = distances[v]
+
+                if candidate + tol < current_best:
+                    distances[v] = candidate
+                    parents[v] = [u]
+                    heappush(queue, (candidate, v))
+                elif abs(candidate - current_best) <= tol:
+                    if u not in parents[v]:
+                        parents[v].append(u)
+
+        final_cost = distances[target]
+        if final_cost == float("inf"):
+            raise ValueError(f"No path between {source} and {target}.")
+
+        def backtrack(node: str) -> List[List[str]]:
+            if node == source:
+                return [[source]]
+
+            all_paths: List[List[str]] = []
+            for parent in parents[node]:
+                for prefix in backtrack(parent):
+                    all_paths.append(prefix + [node])
+            return all_paths
+
+        paths = backtrack(target)
+        if not paths:
+            raise RuntimeError(
+                f"Backtracking failed to reconstruct paths between {source} and {target}."
+            )
+
+        return final_cost, paths
+
     def path_cost(self, path: List[str]) -> float:
         """Return the total cost of walking along the given node sequence."""
         if len(path) < 2:
