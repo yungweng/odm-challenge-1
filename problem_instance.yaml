@@ -37,7 +37,7 @@ graph:
     - [E, L, 5]
     - [F, G, 2]
     - [F, J, 1]
-    - [F, K, 1]
+    - [F, K, 4]
     - [G, H, 2]
     - [G, J, 8]
     - [H, I, 5]
@@ -56,36 +56,36 @@ graph:
 
 products:
   gemstones:
-    profit_per_unit: 30  # euros
-    weight_per_unit: 2   # tons
+    profit_per_unit: 30 # euros
+    weight_per_unit: 2 # tons
   epoxy:
-    profit_per_unit: 10  # euros
-    weight_per_unit: 1   # tons
+    profit_per_unit: 10 # euros
+    weight_per_unit: 1 # tons
   copper:
     profit_per_unit: 100 # euros
-    weight_per_unit: 6   # tons
+    weight_per_unit: 6 # tons
 
 inventory:
   # Format: node_name: {gemstones: X, epoxy: Y, copper: Z}
-  A: {gemstones: 0, epoxy: 0, copper: 0}
-  B: {gemstones: 0, epoxy: 1, copper: 1}
-  C: {gemstones: 1, epoxy: 2, copper: 0}
-  D: {gemstones: 1, epoxy: 0, copper: 0}
-  E: {gemstones: 1, epoxy: 0, copper: 2}
-  F: {gemstones: 1, epoxy: 0, copper: 0}
-  G: {gemstones: 1, epoxy: 3, copper: 2}
-  H: {gemstones: 4, epoxy: 1, copper: 0}
-  I: {gemstones: 2, epoxy: 0, copper: 1}
-  J: {gemstones: 0, epoxy: 0, copper: 3}
-  K: {gemstones: 1, epoxy: 1, copper: 3}
-  L: {gemstones: 0, epoxy: 0, copper: 2}
-  M: {gemstones: 0, epoxy: 3, copper: 0}
-  N: {gemstones: 0, epoxy: 0, copper: 0}
+  A: { gemstones: 0, epoxy: 0, copper: 0 }
+  B: { gemstones: 0, epoxy: 1, copper: 1 }
+  C: { gemstones: 1, epoxy: 2, copper: 0 }
+  D: { gemstones: 1, epoxy: 0, copper: 0 }
+  E: { gemstones: 1, epoxy: 0, copper: 2 }
+  F: { gemstones: 1, epoxy: 0, copper: 0 }
+  G: { gemstones: 1, epoxy: 3, copper: 2 }
+  H: { gemstones: 4, epoxy: 1, copper: 0 }
+  I: { gemstones: 2, epoxy: 0, copper: 1 }
+  J: { gemstones: 0, epoxy: 0, copper: 3 }
+  K: { gemstones: 1, epoxy: 1, copper: 3 }
+  L: { gemstones: 0, epoxy: 0, copper: 2 }
+  M: { gemstones: 0, epoxy: 3, copper: 0 }
+  N: { gemstones: 0, epoxy: 0, copper: 0 }
 
 constraints:
-  warehouse_capacity_tons: 56    # Maximum storage in tons
-  truck_capacity_units: 15       # Maximum total units that can be carried
-  copper_to_gemstone_ratio: 2    # Copper units ≤ 2 × Gemstone units
+  warehouse_capacity_tons: 56 # Maximum storage in tons
+  truck_capacity_units: 15 # Maximum total units that can be carried
+  copper_to_gemstone_ratio: 2 # Copper units ≤ 2 × Gemstone units
 
 routing:
   start_node: A
